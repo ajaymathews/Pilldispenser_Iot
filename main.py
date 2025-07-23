@@ -14,7 +14,7 @@ now = datetime.datetime.now()
 strt_tym=now.minute
 hr=now.hour
 mt=now.minute    
-tym=[strt_tym+1,strt_tym+3,strt_tym+5,strt_tym+7,strt_tym+9,strt_tym+11,strt_tym+13,strt_tym+15,strt_tym+17]
+tym = [strt_tym + i for i in range(1, 18, 2)]
 print(tym)
 data=str(00)
 inv_data=str('ff')
