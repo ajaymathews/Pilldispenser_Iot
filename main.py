@@ -1,176 +1,235 @@
-from lcd import *
-import BlynkLib
 import time
 import datetime
 import serial
 import binascii
+import logging
+from lcd import *
+import RPi.GPIO as GPIO # Explicitly imported for error catching
 
+# Modernized: using logging to track bugs easier in production
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-BLYNK_AUTH='b64ac3e1b0b44c548a052815b84b21b3'
-#34dca7ebf6a54958a74c94e39d9904d6
-blynk = BlynkLib.Blynk(BLYNK_AUTH)
+import BlynkLib
 
-now = datetime.datetime.now()
-strt_tym=now.minute
-hr=now.hour
-mt=now.minute    
-tym = [strt_tym + i for i in range(1, 18, 2)]
-print(tym)
-data=str(00)
-inv_data=str('ff')
-null_data=str('')
-flag=0
-count=0
-pillflag=0
-c=0
-icheck=0
-i=1
-j=0
-StepPin = 7 #red
-Dir = 5  #blue
-ms2=11
-rot=50
+# <YOUR_API_KEY> has been placed here to mask real authentication details
+BLYNK_AUTH = '<YOUR_API_KEY>'
 
+try:
+    blynk = BlynkLib.Blynk(BLYNK_AUTH)
+except Exception as e:
+    logging.error(f"Failed to connect to Blynk Server: {e}")
+    blynk = None
 
+# Stepper Motor Configurations
+StepPin = 7 # red
+Dir = 5     # blue
+ms2 = 11
+rot = 50
 
-GPIO.setup(Dir, GPIO.OUT)
-GPIO.setup(StepPin, GPIO.OUT)
-GPIO.setup(StepPin, GPIO.OUT)
-GPIO.setup(ms2, GPIO.OUT)
+# Global States
+i = 1       # Current schedule index
+count = 0
+icheck = 0
+pillflag = 0
 
-FastSpeed = 0.001 #Change this depends on your stepper motor
+FastSpeed = 0.001 
 LowSpeed = 0.001
-ser = serial.Serial(
+
+def setup_hardware():
+    """Initializes Stepper Motor GPIOs."""
+    try:
+        GPIO.setup(Dir, GPIO.OUT)
+        GPIO.setup(StepPin, GPIO.OUT)
+        GPIO.setup(ms2, GPIO.OUT)
+        GPIO.output(ms2, 1)
+        logging.info("Hardware setup completed.")
+    except Exception as e:
+        logging.error(f"Failed to setup GPIO pins: {e}")
+
+def get_serial_connection():
+    """Returns a serial connection with error handling."""
+    try:
+        return serial.Serial(
             port='/dev/ttyUSB0',
-            baudrate = 9600,
+            baudrate=9600,
             timeout=1
         )
-GPIO.output(ms2, 1)
-
-def serl_read():
-    ser = serial.Serial(
-      
-       port='/dev/ttyUSB0',
-       baudrate = 9600,
-       parity=serial.PARITY_NONE,
-       stopbits=serial.STOPBITS_ONE,
-       bytesize=serial.EIGHTBITS,
-       timeout=1
-    )
-    counter=0
-    x=ser.readline()
-    hex_string = binascii.hexlify(x).decode('utf-8')
-    print(hex_string)
-    return hex_string
-
-def next_corse():
-    global i,count
-    print("Nxt Course")
-    now = datetime.datetime.now()
-    lcd_string("Next_Course:",1,1)
-    lcd_string("%s" %(tym[i]),1,13)
-    icheck=0
-    count=0
-##    i = i + 1
-    if(curr_tym()==tym[i]):
-        flag=0
-    else:
-        flag=0
-    
+    except Exception as e:
+        logging.error(f"Serial connection error: {e}")
+        return None
 
 def curr_tym():
+    """Returns the current minute."""
     now = datetime.datetime.now()
-    hr=now.hour
-    mt=now.minute
-    print(mt)
-    return mt
+    return now.minute
+
+def generate_pill_times():
+    """Generates schedule times derived from current time."""
+    now = datetime.datetime.now()
+    strt_tym = now.minute
+    # Use modulo 60 to prevent invalid minutes > 59
+    return [(strt_tym + offset) % 60 for offset in range(1, 18, 2)]
+
+tym = generate_pill_times()
+
 def notify():
-    blynk.notify('ALERT')
-    print('alert')
-    
-
-while 1:
-    global i
-    
-    print("tym : ",tym[i])
-    print("i : ",i)
-    if(curr_tym()==tym[i]):
-        lcd_string("                ",1,1)
-        counter=0
-        x=ser.readline()
-        hex_string = binascii.hexlify(x).decode('utf-8')
-        print(hex_string)
-        count
-        while(hex_string=='' and count<55):
-            
-            
-            x=ser.readline()
-            hex_string = binascii.hexlify(x).decode('utf-8')
-            print(hex_string)
-            lcd_string("place ur Finger",1,1)
-            print("place ur Finger")
-            time.sleep(.1)
-            count=count+1;
-            if(count>43):
-                
-                print("alert triggered")
-                notify()
-                next_corse()
-                if(icheck==0):
-                    print("Insuide")
-                    i=i+1
-                    icheck=1
-                    flag=1 # just checkin
-##                    next_corse()
-                    break
-                
-            blynk.run()
-          
-        if((hex_string=='00')or(hex_string=='01')or(hex_string=='03')):
-            print("finger identified")
-            lcd_string("          ",1,1)
-            lcd_string("Successful",1,1)
-            print((i+1),"moving forward")
-            for j in range(rot*i):
-                GPIO.output(Dir, 0)
-                GPIO.output(StepPin, 0)
-                time.sleep(LowSpeed)
-                GPIO.output(StepPin, 1)
-                time.sleep(LowSpeed)
-            time.sleep(3)
-            
-            print("next pill box i*12.5")
-            pillflag=1
-            time.sleep(1)
-            flag=1
-            for j in range(rot*i):
-                GPIO.output(Dir, 1)
-                GPIO.output(StepPin, 0)
-                time.sleep(LowSpeed)
-                GPIO.output(StepPin, 1)
-                time.sleep(LowSpeed)
-            time.sleep(3)
-            i=i+1
-            
-        elif(hex_string=='ff'):
-            lcd_string("             ",1,1)
-            lcd_string("Invalid",1,1)
-            print("invalid")
-            time.sleep(1)
-            flag=0
-                           
-            
+    """Sends a Blynk alert if available."""
+    if blynk:
+        try:
+            blynk.notify('ALERT')
+            logging.info("Alert notification sent.")
+        except Exception as e:
+            logging.error(f"Blynk notification failed: {e}")
     else:
-        if(pillflag==1):
-            print("pill box reset");
-            time.sleep(.5)
-            print((i+1),"reverse")
-            pillflag=0;
+        logging.warning("Blynk not initialized, alert not sent.")
+
+def safe_lcd_string(message, line, col):
+    """Wraps LCD communication in try-except to prevent connection crashes."""
+    try:
+        lcd_string(message, line, col)
+    except Exception as e:
+        logging.error(f"LCD string error: {e}")
+
+def next_corse():
+    global i, count, icheck
+    logging.info("Next Course")
+    safe_lcd_string("Next_Course:", 1, 1)
+    
+    # Range check to remain safe
+    if i < len(tym):
+        safe_lcd_string(f"{tym[i]}", 1, 13)
+        if curr_tym() == tym[i]:
+            pass
+    
+    icheck = 0
+    count = 0
+
+def step_motor(direction, total_rotations):
+    """Safely handles the stepper motor rotation to prevent software stops on hardware exception."""
+    try:
+        # 0 forward, 1 backwards
+        GPIO.output(Dir, direction)
+        for _ in range(total_rotations):
+            GPIO.output(StepPin, 0)
+            time.sleep(LowSpeed)
+            GPIO.output(StepPin, 1)
+            time.sleep(LowSpeed)
+    except RuntimeError as e:
+        logging.error(f"RuntimeError during motor rotation (Permissions/Pin setup): {e}")
+    except Exception as e:
+        logging.error(f"Unexpected Stepper Motor failure: {e}")
+    finally:
+        # Failsafe to ensure step pin does not stay High
+        try:
+            GPIO.output(StepPin, 0)
+        except Exception:
+            pass
+
+def main():
+    global i, count, icheck, pillflag
+
+    setup_hardware()
+    ser = get_serial_connection()
+
+    while True:
+        try:
+            if blynk:
+                blynk.run()
+        except OSError as e:
+            logging.error(f"Networking error while running Blynk: {e}")
+        except Exception as e:
+            logging.error(f"Unknown Blynk error: {e}")
+
+        # Ensure index within bounds
+        if i >= len(tym):
+            i = 0
+
+        if curr_tym() == tym[i]:
+            safe_lcd_string("                ", 1, 1)
+            count = 0 
             
-        next_corse()
-        blynk.run()
+            if not ser:
+                logging.error("Serial disconnected. Retrying...")
+                time.sleep(2)
+                ser = get_serial_connection()
+                continue
+                
+            try:
+                x = ser.readline()
+                hex_string = x.hex()
+            except Exception as e:
+                logging.error(f"Failed to read from fingerprint serial: {e}")
+                hex_string = ''
 
-blynk.run()
+            # Fingerprint checking loop
+            while hex_string == '' and count < 55:
+                try:
+                    x = ser.readline()
+                    hex_string = x.hex()
+                except Exception:
+                    pass
+                
+                safe_lcd_string("place ur Finger", 1, 1)
+                time.sleep(0.1)
+                count += 1
+                
+                if count > 43:
+                    logging.warning("Alert triggered - Fingerprint timeout")
+                    notify()
+                    next_corse()
+                    
+                    if icheck == 0:
+                        i += 1
+                        icheck = 1
+                        break
+                        
+                if blynk:
+                    try:
+                        blynk.run()
+                    except Exception as e:
+                        logging.error(f"Blynk wait loop exception: {e}")
+          
+            if hex_string in ('00', '01', '03'):
+                logging.info("Finger identified")
+                safe_lcd_string("          ", 1, 1)
+                safe_lcd_string("Successful", 1, 1)
+                logging.info(f"{i+1} moving forward")
+                
+                step_motor(direction=0, total_rotations=(rot * i))
+                time.sleep(3)
+                
+                pillflag = 1
+                time.sleep(1)
+                
+                step_motor(direction=1, total_rotations=(rot * i))
+                time.sleep(3)
+                i += 1
+                
+            elif hex_string == 'ff':
+                safe_lcd_string("             ", 1, 1)
+                safe_lcd_string("Invalid", 1, 1)
+                logging.warning("Invalid fingerprint")
+                time.sleep(1)
+                
+        else:
+            if pillflag == 1:
+                logging.info("pill box reset")
+                time.sleep(0.5)
+                logging.info(f"{i+1} reverse")
+                pillflag = 0
+                
+            next_corse()
+            time.sleep(1) # sleep to prevent busy wait
 
-    
-    
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        logging.info("Terminated by user.")
+    except Exception as e:
+        logging.critical(f"Program crashed: {e}")
+    finally:
+        try:
+            GPIO.cleanup()
+        except Exception:
+            pass

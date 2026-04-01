@@ -228,12 +228,12 @@ class Blynk(BlynkProtocol):
             self.conn = socket.socket()
             self.conn.connect(socket.getaddrinfo(self.server, self.port)[0][4])
             try:
-                self.conn.settimeout(eval('0.05'))
-            except:
+                self.conn.settimeout(0.05)
+            except OSError:
                 self.conn.settimeout(0)
             BlynkProtocol.connect(self)
-        except:
-            raise ValueError('Connection with the Blynk server %s:%d failed' % (self.server, self.port))
+        except Exception as e:
+            raise ValueError(f'Connection with the Blynk server {self.server}:{self.port} failed. Err: {e}')
 
     def _write(self, data):
         #print('<', data.hex())
@@ -247,7 +247,8 @@ class Blynk(BlynkProtocol):
             #print('>', data.hex())
         except KeyboardInterrupt:
             raise
-        except: # TODO: handle disconnect
+        except (socket.timeout, OSError) as e:
+            # Handle socket disconnect natively instead of masking all exceptions globally
             pass
         self.process(data)
 
