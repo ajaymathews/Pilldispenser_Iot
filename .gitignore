@@ -1,1 +1,10 @@
 __pycache__/
+
+# Security
+archive/
+config/settings.py
+config/config.py
+settings.py
+config.py
+*.pyc
+__pycache__/
